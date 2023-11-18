@@ -27,6 +27,26 @@ static int inited = 0;
 static struct sigaction sa_saved;
 static at_job_stp at_job_queue[JOBMAX];
 
+static void alrm_action(int n, siginfo_t *infop, void *arg)
+{
+    int i;
+    if(infop->si_code != SI_KERNEL)
+        return ;
+    
+    for(i = 0; i < JOBMAX; i++)
+    {
+        if(at_job_queue[i] != NULL && (at_job_queue[i]->job_state == JOB_RUNNING))
+        {
+            at_job_queue[i]->job_remain --;
+            if(at_job_queue[i]->job_remain == 0)
+            {
+                at_job_queue[i]->job_func(at_job_queue[i]->arg);
+                at_job_queue[i]->job_state = JOB_OVER;
+            }
+        }
+    }
+}
+
 static void module_unload()
 {
     struct sigaction sa;
@@ -46,31 +66,29 @@ static void module_load()
     struct sigaction sa;
     struct itimerval itv;
 
-    sa.sa_sigaction = sa_handler;
-    setempty(sa.sa_mask);
-    sa.flags = SA_SIGINFO;
+    sa.sa_sigaction = alrm_action;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
     sigaction(SIGALRM, &sa, &sa_saved);
 
     itv.it_interval.tv_sec = 1;
     itv.it_interval.tv_usec = 0;
     itv.it_value.tv_sec = 1;
     itv.it_value.tv_usec = 0;
-    setitimer(SIGALRM, &itv, NULL);
+    setitimer(ITIMER_REAL, &itv, NULL);
 
-    at_exit(module_unload);
+    atexit(module_unload);
 }
 
 static int get_free_pos()
 {
     int id;
     int i;
-
     for(i = 0; i < JOBMAX; i++)
     {
-        if(NULL == at_job_queue[i])
+        if(at_job_queue[i] == NULL)
             return i;
     }
-
     return -ENOSPC;
 }
 
@@ -80,6 +98,13 @@ int at_addjob(int sec, at_job_func jobp, void *arg)
     {
         module_load();  //挂载定时器
         inited = 1;
+    }
+    
+    int id = get_free_pos();
+    if(id < 0)
+    {
+        perror("get_free_pos()");
+        return -ENOSPC;
     }
 
     at_job_stp me = malloc(sizeof(at_job_st));
@@ -95,17 +120,11 @@ int at_addjob(int sec, at_job_func jobp, void *arg)
     me->job_func = jobp;
     me->arg = arg;
 
-    int id = get_free_pos();
-    if(id < 0)
-    {
-        perror("get_free_pos()");
-        return -ENOSPC;
-    }
+    
 
     at_job_queue[id] = me;
-    me->job_func(arg);
 
-    exit(1);
+    return id;
 }
 int at_canceljob(int id)
 {
