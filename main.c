@@ -20,6 +20,7 @@ void f3(void *s)
     printf("%s\n", s);
 }
 
+
 int main(){
     int id = at_addjob(5, f1, "f1()");
     if(id < 0 || id >= JOBMAX)
@@ -42,11 +43,8 @@ int main(){
         return -ENOSPC;
     }
 
-    while(1)
-    {
-        write(1, ".", 1);
-        sleep(1);
-    }
+
+    while(1);
 
     exit(1);
 }

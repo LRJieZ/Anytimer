@@ -32,6 +32,8 @@ static void alrm_action(int n, siginfo_t *infop, void *arg)
     int i;
     if(infop->si_code != SI_KERNEL)
         return ;
+
+    write(1, ".", 1);
     
     for(i = 0; i < JOBMAX; i++)
     {
